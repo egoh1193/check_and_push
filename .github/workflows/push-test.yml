@@ -34,4 +34,4 @@ jobs:
           EOF
 
       - name: Run crawler (push)
-        run: npm run start:prod:basic:3h
+        run: MODE=WIDE MAX_POST_AGE_HOURS=5 NODE_ENV=production SILENT_MODE=true node app.js
