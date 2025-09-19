@@ -5,7 +5,12 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node --env-file=.env app.js"
+    "start": "node --env-file=.env app.js",
+    "start:basic": "MODE=BASIC node --env-file=.env app.js",
+    "start:wide": "MODE=WIDE node --env-file=.env app.js",
+    "start:prod": "NODE_ENV=production SILENT_MODE=true node app.js",
+    "start:prod:basic:3h": "MODE=BASIC MAX_POST_AGE_HOURS=3 SILENT_MODE=true node --env-file=.env app.js",
+    "start:prod:wide:3h": "MODE=WIDE MAX_POST_AGE_HOURS=3 SILENT_MODE=true node --env-file=.env app.js"
   },
   "keywords": [],
   "author": "",

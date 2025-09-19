@@ -1,0 +1,37 @@
+name: Push Test Crawler
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  run-on-push:
+    runs-on: ubuntu-latest
+    env:
+      API_URL: ${{ secrets.API_URL }}
+      GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Prepare .env file
+        run: |
+          cat <<'EOF' > .env
+          API_URL=${API_URL}
+          GIST_TOKEN=${GIST_TOKEN}
+          DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+          EOF
+
+      - name: Run crawler (push)
+        run: npm run start:prod:basic:3h
