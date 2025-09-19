@@ -19,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm install
@@ -33,4 +33,8 @@ jobs:
           EOF
 
       - name: Run crawler
-        run: npm run start:prod:basic:3h
+        env:
+          MODE: BASIC
+          MAX_POST_AGE_HOURS: 0.3
+          SILENT_MODE: "true"
+        run: node --env-file=.env app.js
