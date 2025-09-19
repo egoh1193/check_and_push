@@ -32,4 +32,8 @@ jobs:
           EOF
 
       - name: Run crawler (wide)
-        run: npm run start:prod:wide:3h
+        env:
+          MODE: WIDE
+          MAX_POST_AGE_MINUTES: 180
+          SILENT_MODE: "true"
+        run: node --env-file=.env app.js
