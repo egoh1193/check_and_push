@@ -52,7 +52,12 @@ export class Crawler {
     const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/);
     if (match) {
       const [, y, m, d, hh, mm, ss] = match;
-      const date = new Date(
+      // 入力にタイムゾーンが無い場合は板の表記に合わせて JST(+09:00) とみなす
+      const isoLike = `${y}-${m}-${d}T${hh}:${mm}:${ss ? ss : "00"}`;
+      const jstDate = new Date(`${isoLike}+09:00`);
+      if (!Number.isNaN(jstDate.getTime())) return jstDate;
+
+      const fallbackLocal = new Date(
         Number(y),
         Number(m) - 1,
         Number(d),
@@ -60,7 +65,7 @@ export class Crawler {
         Number(mm),
         ss ? Number(ss) : 0
       );
-      if (!Number.isNaN(date.getTime())) return date;
+      if (!Number.isNaN(fallbackLocal.getTime())) return fallbackLocal;
     }
 
     const fallback = new Date(trimmed);
