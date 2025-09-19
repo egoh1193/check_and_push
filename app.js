@@ -4,7 +4,7 @@
 //   API_URL=https://example.com/api
 //   PAGES=1,2,3
 //   MODE=BASIC   ← または WIDE
-//   MAX_POST_AGE_HOURS=4
+//   MAX_POST_AGE_MINUTES=240
 //   GIST_TOKEN=ghp_xxx           ← 設定時のみGist投稿
 //   GIST_DESCRIPTION=任意の説明
 //   GIST_FILENAME=board_results.json
@@ -58,13 +58,15 @@ loadEnvFile(process.env.ENV_FILE || ".env");
 // -------- アプリの可変設定（ここを書き換えて使う） --------
 const DEFAULT_MODE = "BASIC";              // MODE が未指定時のフォールバック
 const DEFAULT_PAGES = [1, 2, 3];           // PAGES が未指定時に巡回するページ番号
-const DEFAULT_MAX_POST_AGE_HOURS = 4;      // 投稿許容経過時間（時間）
+const DEFAULT_MAX_POST_AGE_MINUTES = 240;  // 投稿許容経過時間（分）
 const DEFAULT_DISCORD_MESSAGE_PREFIX = "Gist created:";
 
 const envSilent = process.env.SILENT_MODE;
 const SILENT_MODE = envSilent !== undefined
   ? parseBoolean(envSilent)
   : (process.env.NODE_ENV?.toLowerCase() === "production");
+
+const forceLog = (...args) => process.stdout.write(`${args.join(" ")}\n`);
 
 if (SILENT_MODE) {
   const noop = () => {};
@@ -115,12 +117,16 @@ const MODE = (process.env.MODE || DEFAULT_MODE).toUpperCase();
     const ignore_words_s = Crawler.toWordList(crawler.data1.search?.["i:s"]);
     const ignore_words_n = Crawler.toWordList(crawler.data1.search?.["i:n"]);
 
-    // 投稿の最大許容経過時間（時間）
-    const maxPostAgeHours = (() => {
-      const raw = Number(process.env.MAX_POST_AGE_HOURS);
-      if (!Number.isFinite(raw)) return DEFAULT_MAX_POST_AGE_HOURS;
-      if (raw <= 0) return 0; // 0 以下ならフィルタ無効
-      return raw;
+    // 投稿の最大許容経過時間（分優先・時間は後方互換）
+    const maxPostAgeMinutes = (() => {
+      const raw = process.env.MAX_POST_AGE_MINUTES;
+      if (raw !== undefined) {
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed)) return DEFAULT_MAX_POST_AGE_MINUTES;
+        if (parsed <= 0) return 0;
+        return parsed;
+      }
+      return DEFAULT_MAX_POST_AGE_MINUTES;
     })();
 
     // API側で現在時刻が提供されている場合はそれを優先
@@ -131,8 +137,8 @@ const MODE = (process.env.MODE || DEFAULT_MODE).toUpperCase();
     console.log("ignore_words_a (age NG):", ignore_words_a);
     console.log("ignore_words_s (sex NG):", ignore_words_s);
     console.log("ignore_words_n (name NG):", ignore_words_n);
-    console.log("max_post_age_hours:", maxPostAgeHours);
-    console.log(
+    console.log("max_post_age_minutes:", maxPostAgeMinutes);
+    forceLog(
       "reference_now:",
       referenceNow.toISOString(),
       "(local:", referenceNow.toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }), ")"
@@ -149,18 +155,27 @@ const MODE = (process.env.MODE || DEFAULT_MODE).toUpperCase();
 
     // 3) 各スレッドURLを巡回して投稿抽出
     const threadResults = await crawler.crawlThreads(threadList, {
-      maxPostAgeHours,
+      maxPostAgeHours: maxPostAgeMinutes / 60,
       now: referenceNow,
     });
 
+    const activeResults = threadResults.filter(r => Array.isArray(r.posts) && r.posts.length > 0);
+
+    if (threadResults.length !== activeResults.length) {
+      console.log(
+        "空投稿スレッド除外:",
+        `${threadResults.length - activeResults.length}件`
+      );
+    }
+
     // 4) 集計
-    const allPosts = threadResults.flatMap(r => r.posts);
+    const allPosts = activeResults.flatMap(r => r.posts);
     console.log("投稿総数(フィルタ後):", allPosts.length);
 
     // サンプル出力
-    console.log(JSON.stringify(threadResults.slice(0, 2), null, 2));
+    console.log(JSON.stringify(activeResults.slice(0, 2), null, 2));
 
-    const hasTopics = threadResults.length > 0;
+    const hasTopics = activeResults.length > 0;
     if (hasTopics) {
       const gistToken = process.env.GIST_TOKEN?.trim();
       if (gistToken) {
@@ -173,8 +188,8 @@ const MODE = (process.env.MODE || DEFAULT_MODE).toUpperCase();
           generatedAt: referenceNow.toISOString(),
           mode: MODE,
           pages: PAGES,
-          maxPostAgeHours,
-          results: threadResults,
+          maxPostAgeMinutes,
+          results: activeResults,
         }, null, 2);
 
         try {
@@ -190,8 +205,11 @@ const MODE = (process.env.MODE || DEFAULT_MODE).toUpperCase();
           const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL?.trim();
           if (discordWebhookUrl) {
             const prefix = process.env.DISCORD_MESSAGE_PREFIX?.trim() || DEFAULT_DISCORD_MESSAGE_PREFIX;
-            const ageLabel = maxPostAgeHours > 0 ? `${maxPostAgeHours}h` : "no-limit";
-            const discordContent = `${prefix} [MODE=${MODE}] [AGE<=${ageLabel}] ${gistUrl}`.trim();
+            let ageLabel = "no-limit";
+            if (maxPostAgeMinutes > 0) {
+              ageLabel = `${maxPostAgeMinutes}m`;
+            }
+            const discordContent = `${prefix} [MODE=${MODE}] [AGE<=${ageLabel}] posts=${allPosts.length} ${gistUrl}`.trim();
             const discordUsername = process.env.DISCORD_WEBHOOK_USERNAME?.trim();
             const discordAvatar = process.env.DISCORD_WEBHOOK_AVATAR?.trim();
             try {
