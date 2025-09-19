@@ -35,6 +35,6 @@ jobs:
       - name: Run crawler
         env:
           MODE: BASIC
-          MAX_POST_AGE_HOURS: 0.3
+          MAX_POST_AGE_MINUTES: 18
           SILENT_MODE: "true"
         run: node --env-file=.env app.js
