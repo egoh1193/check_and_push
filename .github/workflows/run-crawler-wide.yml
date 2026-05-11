@@ -2,30 +2,41 @@ name: Scheduled Wide Crawler
 
 on:
   schedule:
+    # 3時間ごとに実行
     - cron: "0 */3 * * *"
+  # 手動実行ボタンを有効化
+  workflow_dispatch:
 
 jobs:
   run-crawler-wide:
     runs-on: ubuntu-latest
+    
+    # Push権限を付与
+    permissions:
+      contents: write
+
     env:
       API_URL: ${{ secrets.API_URL }}
       GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24' # 警告対応で24にアップデート
 
       - name: Install dependencies
         run: npm install
 
       - name: Prepare .env file
         run: |
-          cat <<'EOF' > .env
+          cat <<EOF > .env
           API_URL=${API_URL}
           GIST_TOKEN=${GIST_TOKEN}
           DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
@@ -37,3 +48,16 @@ jobs:
           MAX_POST_AGE_MINUTES: 180
           SILENT_MODE: "true"
         run: node --env-file=.env app.js
+
+      - name: Keep-alive (Auto-commit to prevent 60-day inactivity)
+        # 3時間おき（1日8回実行）なので、8回に1回（約1日に1回）だけコミット
+        if: github.run_number % 8 == 0
+        run: |
+          echo "Last wide run: $(date)" > last_wide_run.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add last_wide_run.log
+          if ! git diff --staged --exit-code --quiet; then
+            git commit -m "chore: update wide execution log [skip ci]"
+            git push
+          fi
